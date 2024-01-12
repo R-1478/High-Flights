@@ -1,14 +1,18 @@
 import click
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from models import  Customer, Flight, Pilot
+from models import Customer, Flight, Pilot
+
+
 
 Base = declarative_base()
 engine = create_engine('sqlite:///flights.db')
 
+
 @click.group()
 def cli():
     pass
+
 
 @click.command()
 def init_db():
@@ -19,7 +23,7 @@ def init_db():
 Session = sessionmaker(bind=engine)
 @click.command()
 def add_customer():
-    """Add a customer to the database or log in existing customer."""
+    """Add a customer to the database or log in an existing customer."""
     email = click.prompt('Enter your email')
 
     session = Session()
@@ -30,81 +34,83 @@ def add_customer():
     if existing_customer:
         click.echo(f"Welcome back, {existing_customer.name}!")
         customer_id = existing_customer.id
+        list_flights(customer_id)
     else:
         first_name = click.prompt('Enter your first name')
         last_name = click.prompt('Enter your last name')
-        
+
         new_customer = Customer(name=f"{first_name} {last_name}", email=email)
         session.add(new_customer)
+        click.echo('Customer added to the database.')
         session.commit()
-        
+
         click.echo(f'Welcome, {new_customer.name}!')
         customer_id = new_customer.id
 
     click.echo(f'Your customer ID: {customer_id}')
+    list_flights(customer_id)
 
-    
-    
-    click.echo('Customer added to the database.')
-
-@click.command()
-def choose_destination():
-    """Choose a destination."""
-    # Add logic to display available destinations and handle user input
-    click.echo('Destination options:')
-    # Display your destination options and handle user input
 @click.command()
 def list_customers():
     """List available customers"""
-    Session = sessionmaker(bind=engine)
     session = Session()
     customers = session.query(Customer).all()
     print(customers)
 
-
-@click.command()
-def list_flights():
+def list_flights(customer_id):
     """List available flights."""
     # Add logic to fetch and display available flights
     # You can customize the query based on your model structure
-    Session = sessionmaker(bind=engine)
     session = Session()
     flights = session.query(Flight).all()
 
     click.echo('Available flights:')
     for flight in flights:
-        click.echo(f"{flight.id}. {flight.plane_name} - {flight.takeoff_time} by {flight.pilot.name}")
+        click.echo(f" {flight.plane_name} - {flight.takeoff_time}hrs: {flight.destination}")
 
     # Handle user input for choosing a flight
-    flight_id = click.prompt('Enter the ID of the flight you want to book', type=int)
+    flight_name = click.prompt('Enter the name of the flight you want to book', type=str)
+    if flight_name == "exit":
+        session.close()
+    else:
 
-    # Fetch the selected flight
-    selected_flight = session.query(Flight).get(flight_id)
+        selected_flight = session.query(Flight).filter_by(plane_name=flight_name).first()
 
-  
-    click.echo(f"Price for {selected_flight.plane_name}: {selected_flight.price}")
+    if selected_flight:
+        click.echo(f"Price for {selected_flight.plane_name}: {selected_flight.price}")
 
     # Handle user input for payment
-    proceed_payment = click.confirm('Do you want to proceed with the payment?')
+    proceed_payment = click.confirm(f'Do you want to proceed with the payment for {selected_flight.plane_name}?')
 
     if proceed_payment:
-        # Add logic to handle payment confirmation and assign the customer to the selected flight
-        customer_id = None
-        selected_flight.customers.append(session.query(Customer).get(customer_id))
-        session.commit()
-        click.echo('Payment successful. Customer assigned to the flight.')
-    else:
-        click.echo('Payment canceled.')
+    # Add logic to handle payment confirmation and assign the customer to the selected flight
+        customer = session.query(Customer).get(customer_id)
+    
+    # Assuming selected_flight.id is the unique identifier for flights
+    customer.flight_id = selected_flight.id
+    
+    # Append the customer to the selected flight
+    selected_flight.customers.append(customer)
+    
+    # Commit the changes to the database
+    session.commit()
+    
+    click.echo('Payment successful. Customer assigned to the flight.')
+     
+    # click.echo('Payment canceled.')
+
 
     # Display additional details like plane name and pilot
     click.echo(f"Selected Plane: {selected_flight.plane_name}")
     click.echo(f"Pilot: {selected_flight.pilot.name}")
+    click.echo(f"takeoff: {selected_flight.takeoff_time}")
+
+    session.close()
 
 # Add commands to the CLI group
 cli.add_command(init_db)
 cli.add_command(add_customer)
-cli.add_command(choose_destination)
-cli.add_command(list_flights)
+cli.add_command(list_customers)
 
 if __name__ == '__main__':
     cli()
